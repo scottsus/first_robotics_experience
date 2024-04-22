@@ -269,7 +269,7 @@ def main(if_sim):
     print("Closing hand")
     ### FILL in your code here (Q5)
 
-    preshape = [0.8,0.8]
+    preshape = [1,1]
     close_hand(hand, preshape)
     ###
 
@@ -280,18 +280,32 @@ def main(if_sim):
     # compute the Jacobian pseudo-inverse for moving the hand upwards
     ### FILL in your code here (Q6 and Q7)
     q = arm_skeleton.get_positions()
-    delt_x = np.array([0,0,0,-0.5,0,0])
-    J = arm_skeleton.get_jacobian(hand.get_endeffector_body_node())
-    Jt = np.transpose(J)
-    J_Jt_Dot = np.dot(J, Jt)
-    inverse = np.linalg.inv(J_Jt_Dot)
-    J_dot_inv = np.dot(J,inverse)
-    delt_q_err = np.dot(J_dot_inv,  delt_x)
-    print(delt_q_err)
-    q -= delt_q_err
-    q = np.linalg.pinv(np.array([q]))
-    print(q)
+    # delt_x = np.array([0,0,0,-0.5,0,0])
+    # J = arm_skeleton.get_jacobian(hand.get_endeffector_body_node())
+    # Jt = np.transpose(J)
+    # J_Jt_Dot = np.dot(J, Jt)
+    # inverse = np.linalg.inv(J_Jt_Dot)
+    # J_dot_inv = np.dot(Jt,inverse)
+    # delt_q_err = np.dot(J_dot_inv,  delt_x)
+    # print(delt_q_err)
+    # q -= delt_q_err
+    # # q = np.linalg.pinv(np.array([q]))
+    # print(q)
     
+    delt_x = np.array([0,0,0,-0.01,0,0])
+    for i in range(50):
+        J = arm_skeleton.get_jacobian(hand.get_endeffector_body_node())
+        Jt = np.transpose(J)
+        J_Jt_Dot = np.dot(J, Jt)
+        inverse = np.linalg.inv(J_Jt_Dot)
+        J_dot_inv = np.dot(Jt,inverse)
+        delt_q_err = np.dot(J_dot_inv,  delt_x)
+        print(delt_q_err)
+        q -= delt_q_err
+        ada.set_positions(q)
+        viewer.update()
+        time.sleep(0.05)
+
     ###
     if if_sim:
             ada.set_positions(q)
