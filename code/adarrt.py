@@ -105,14 +105,30 @@ class AdaRRT():
         """
         for k in range(self.max_iter):
             # FILL in your code here
+            ch=np.random.choice(2,1, p=[0.8, 0.2])
+            if ch==0:
+                rsam=self._get_random_sample()
+            else:
+            	rsam=self._get_random_sample_near_goal()
 
+            #rsam=self._get_random_sample()
+            nn = self._get_nearest_neighbor(rsam)
+            new_node = self._extend_sample(rsam, nn)
             if new_node and self._check_for_completion(new_node):
                 # FILL in your code here
-
+                goal_node = new_node.add_child(self.goal.state)
+                path = self._trace_path_from_start(goal_node)
                 return path
 
         print("Failed to find path from {0} to {1} after {2} iterations!".format(
             self.start.state, self.goal.state, self.max_iter))
+    
+    def _get_random_sample_near_goal(self):
+        sample=np.empty(self.start.state.shape[0])
+        for i in range(self.start.state.shape[0]):
+            A=np.arange(self.goal.state[i]-0.05,self.goal.state[i]+0.05,0.1)
+            sample[i]=np.random.choice(A)
+        return sample
 
     def _get_random_sample(self):
         """
@@ -122,6 +138,11 @@ class AdaRRT():
             space.
         """
         # FILL in your code here
+        sample=np.empty(self.start.state.shape[0])
+        for i in range(self.start.state.shape[0]):
+            A=np.arange(self.joint_lower_limits[i],self.joint_upper_limits[i],0.1)
+            sample[i]=np.random.choice(A)
+        return sample
 
     def _get_nearest_neighbor(self, sample):
         """
@@ -132,6 +153,15 @@ class AdaRRT():
         :returns: A Node object for the closest neighbor.
         """
         # FILL in your code here
+        nodelist=self.start.__iter__()
+        # min dist starts as infinity
+        min_dist=float('inf')
+        for node in nodelist:
+            dist=np.linalg.norm(node.state-sample)
+            if dist < min_dist:
+                min_dist=dist
+                nn=node
+        return nn
 
     def _extend_sample(self, sample, neighbor):
         """
@@ -145,6 +175,18 @@ class AdaRRT():
         :returns: The new Node object. On failure (collision), returns None.
         """
         # FILL in your code here
+        if np.linalg.norm(sample-neighbor.state)<=self.step_size:
+            new_node_state=sample
+            if self._check_for_collision(new_node_state):
+                return
+            new_node=neighbor.add_child(new_node_state) 
+        else:
+            u=(sample-neighbor.state)/np.linalg.norm(sample-neighbor.state)#(np.sqrt(np.sum((sample-neighbor.state)**2)))
+            new_node_state=neighbor.state+u*self.step_size
+            if self._check_for_collision(new_node_state):
+            	return 
+            new_node=neighbor.add_child(new_node_state)
+        return new_node
 
     def _check_for_completion(self, node):
         """
@@ -154,6 +196,7 @@ class AdaRRT():
         :returns: Boolean indicating node is close enough for completion.
         """
         # FILL in your code here
+        return np.linalg.norm(np.absolute(self.goal.state-node.state)) <= self.goal_precision
 
     def _trace_path_from_start(self, node=None):
         """
@@ -165,6 +208,14 @@ class AdaRRT():
             ending at the goal state.
         """
         # FILL in your code here
+        if node is None:
+            node = self.goal
+        nodeList = []
+        while node is not None:
+            nodeList.append(node.state)
+            node = node.parent
+        return nodeList[::-1]
+        
 
     def _check_for_collision(self, sample):
         """
@@ -238,12 +289,12 @@ def main():
         for i, waypoint in enumerate(path):
             waypoints.append((0.0 + i, waypoint))
 
-        t0 = time.clock()
+        t0 = time.process_time()
         traj = ada.compute_joint_space_path(
             ada.get_arm_state_space(), waypoints)
-        t = time.clock() - t0
+        t = time.process_time() - t0
         print(str(t) + "seconds elapsed")
-        raw_input('Press ENTER to execute trajectory and exit')
+        input('Press ENTER to execute trajectory and exit')
         ada.execute_trajectory(traj)
         rospy.sleep(1.0)
 

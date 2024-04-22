@@ -18,7 +18,14 @@ def createBw():
     :returns: A 6x2 array Bw
     """
     ### FILL in your code here (Q2 and Q3)
-
+    Bw = np.array([
+        [0, 0], # xmin, xmax
+        [0, 0], # ymin, ymax
+        [0, 0], # zmin, zmax
+        [0, 0], # roll_min, roll_max
+        [0, 0], # pitch_min, pitch_max
+        [0, np.pi]  # yaw_min, yaw_max
+    ])
 
     ###
     return Bw
@@ -145,7 +152,7 @@ def main(if_sim):
     if if_sim:
         ada.set_positions(arm_home)
     else:
-        raw_input("Please move arm to home position with the joystick. " +
+        input("Please move arm to home position with the joystick. " +
             "Press ENTER to continue...")
 
     viewer.add_frame(hand_node)
@@ -179,12 +186,12 @@ def main(if_sim):
         collision_free_constraint)
 
     rospy.sleep(1.)
-    raw_input("Press ENTER to generate the TSR...")
+    input("Press ENTER to generate the TSR...")
 
     # create TSR
     sodaTSR = createSodaTSR(soda_pose, hand)
     marker = viewer.add_tsr_marker(sodaTSR)
-    raw_input("Press ENTER to start planning goals...")
+    input("Press ENTER to start planning goals...")
 
     # set up IK generator
     ik_sampleable = adapy.create_ik(
@@ -210,12 +217,21 @@ def main(if_sim):
     if if_sim:
         ada.set_positions(arm_home)
 
-    raw_input("Press ENTER to start RRT planning...")
+    input("Press ENTER to start RRT planning...")
     trajectory = None
     for configuration in configurations:
         # Your AdaRRT planner
         ### FILL in your code here (Q4)
-
+        adaRRT = AdaRRT(
+            start_state=np.array(arm_home),
+            goal_state=np.array(configuration),
+            ada=ada,
+            ada_collision_constraint=full_collision_constraint,
+            step_size=0.25,
+            goal_precision=1.0
+        )
+        rospy.sleep(1.0)
+        trajectory = adaRRT.build()
 
         ###
         if trajectory:
@@ -234,18 +250,18 @@ def main(if_sim):
         waypoints.append((0.0 + i, waypoint))
 
     # compute trajectory in joint space
-    t0 = time.clock()
+    t0 = time.process_time()
     traj = ada.compute_joint_space_path(ada.get_arm_state_space(), waypoints)
     retimed_traj = ada.compute_retime_path(ada.get_arm_skeleton(), traj)
-    t = time.clock() - t0
+    t = time.process_time() - t0
     print(str(t) + "seconds elapsed")
-    raw_input('Press ENTER to execute the trajectory...')
+    input('Press ENTER to execute the trajectory...')
 
     # execute the trajectory
     if not if_sim:
         ada.start_trajectory_executor()
     ada.execute_trajectory(retimed_traj)
-    raw_input('Press ENTER after robot has approached the can...')
+    input('Press ENTER after robot has approached the can...')
     if not if_sim:
         ada.set_positions(waypoints[-1][1])
 
@@ -253,15 +269,28 @@ def main(if_sim):
     print("Closing hand")
     ### FILL in your code here (Q5)
 
+    preshape = [0.8,0.8]
+    close_hand(hand, preshape)
     ###
 
-    raw_input('Press ENTER after robot has succeeded closing the hand...')
+    input('Press ENTER after robot has succeeded closing the hand...')
     if if_sim:
         hand.grab(soda)
 
     # compute the Jacobian pseudo-inverse for moving the hand upwards
     ### FILL in your code here (Q6 and Q7)
-
+    q = arm_skeleton.get_positions()
+    delt_x = np.array([0,0,0,-0.5,0,0])
+    J = arm_skeleton.get_jacobian(hand.get_endeffector_body_node())
+    Jt = np.transpose(J)
+    J_Jt_Dot = np.dot(J, Jt)
+    inverse = np.linalg.inv(J_Jt_Dot)
+    J_dot_inv = np.dot(J,inverse)
+    delt_q_err = np.dot(J_dot_inv,  delt_x)
+    print(delt_q_err)
+    q -= delt_q_err
+    q = np.linalg.pinv(np.array([q]))
+    print(q)
     
     ###
     if if_sim:
@@ -275,7 +304,7 @@ def main(if_sim):
         retimed_traj = ada.compute_retime_path(ada.get_arm_skeleton(), traj)
         ada.execute_trajectory(retimed_traj)
 
-    raw_input('Press ENTER after robot has succeeded lifting up the can...')
+    input('Press ENTER after robot has succeeded lifting up the can...')
 
     # clean the scene
     # world.remove_skeleton(soda)
