@@ -1,11 +1,16 @@
 #!/usr/bin/env python
 
+import sys
 import time
 
 import adapy
 import numpy as np
 import rospy
 
+if sys.version_info[0] < 3:
+    current_time = time.clock
+else:
+    current_time = time.process_time
 
 class AdaRRT():
     """
@@ -109,7 +114,7 @@ class AdaRRT():
             if ch==0:
                 rsam=self._get_random_sample()
             else:
-            	rsam=self._get_random_sample_near_goal()
+                rsam=self._get_random_sample_near_goal()
 
             #rsam=self._get_random_sample()
             nn = self._get_nearest_neighbor(rsam)
@@ -184,7 +189,7 @@ class AdaRRT():
             u=(sample-neighbor.state)/np.linalg.norm(sample-neighbor.state)#(np.sqrt(np.sum((sample-neighbor.state)**2)))
             new_node_state=neighbor.state+u*self.step_size
             if self._check_for_collision(new_node_state):
-            	return 
+                return
             new_node=neighbor.add_child(new_node_state)
         return new_node
 
@@ -289,10 +294,10 @@ def main():
         for i, waypoint in enumerate(path):
             waypoints.append((0.0 + i, waypoint))
 
-        t0 = time.process_time()
+        t0 = current_time()
         traj = ada.compute_joint_space_path(
             ada.get_arm_state_space(), waypoints)
-        t = time.process_time() - t0
+        t = current_time() - t0
         print(str(t) + "seconds elapsed")
         input('Press ENTER to execute trajectory and exit')
         ada.execute_trajectory(traj)

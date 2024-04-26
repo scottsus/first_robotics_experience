@@ -10,6 +10,12 @@ import rospy
 
 from adarrt import AdaRRT
 
+if sys.version_info[0] < 3:
+    current_time = time.clock
+    user_input = raw_input
+else:
+    current_time = time.process_time
+    user_input = input
 
 def createBw():
     """
@@ -152,7 +158,7 @@ def main(if_sim):
     if if_sim:
         ada.set_positions(arm_home)
     else:
-        input("Please move arm to home position with the joystick. " +
+        user_input("Please move arm to home position with the joystick. " +
             "Press ENTER to continue...")
 
     viewer.add_frame(hand_node)
@@ -186,12 +192,12 @@ def main(if_sim):
         collision_free_constraint)
 
     rospy.sleep(1.)
-    input("Press ENTER to generate the TSR...")
+    user_input("Press ENTER to generate the TSR...")
 
     # create TSR
     sodaTSR = createSodaTSR(soda_pose, hand)
     marker = viewer.add_tsr_marker(sodaTSR)
-    input("Press ENTER to start planning goals...")
+    user_input("Press ENTER to start planning goals...")
 
     # set up IK generator
     ik_sampleable = adapy.create_ik(
@@ -217,7 +223,7 @@ def main(if_sim):
     if if_sim:
         ada.set_positions(arm_home)
 
-    input("Press ENTER to start RRT planning...")
+    user_input("Press ENTER to start RRT planning...")
     trajectory = None
     for configuration in configurations:
         # Your AdaRRT planner
@@ -250,75 +256,80 @@ def main(if_sim):
         waypoints.append((0.0 + i, waypoint))
 
     # compute trajectory in joint space
-    t0 = time.process_time()
+    t0 = current_time()
     traj = ada.compute_joint_space_path(ada.get_arm_state_space(), waypoints)
     retimed_traj = ada.compute_retime_path(ada.get_arm_skeleton(), traj)
-    t = time.process_time() - t0
-    print(str(t) + "seconds elapsed")
-    input('Press ENTER to execute the trajectory...')
+    t = current_time() - t0
+    print(str(t) + " seconds elapsed")
+    user_input('Press ENTER to execute the trajectory...')
 
     # execute the trajectory
     if not if_sim:
         ada.start_trajectory_executor()
     ada.execute_trajectory(retimed_traj)
-    input('Press ENTER after robot has approached the can...')
+    time.sleep(0.05)
+    user_input('Press ENTER after robot has approached the can...')
     if not if_sim:
         ada.set_positions(waypoints[-1][1])
 
     # execute the grasp
     print("Closing hand")
     ### FILL in your code here (Q5)
-
     preshape = [1,1]
     close_hand(hand, preshape)
     ###
 
-    input('Press ENTER after robot has succeeded closing the hand...')
+    user_input('Press ENTER after robot has succeeded closing the hand...')
     if if_sim:
         hand.grab(soda)
 
     # compute the Jacobian pseudo-inverse for moving the hand upwards
     ### FILL in your code here (Q6 and Q7)
     q = arm_skeleton.get_positions()
-    # delt_x = np.array([0,0,0,-0.5,0,0])
-    # J = arm_skeleton.get_jacobian(hand.get_endeffector_body_node())
-    # Jt = np.transpose(J)
-    # J_Jt_Dot = np.dot(J, Jt)
-    # inverse = np.linalg.inv(J_Jt_Dot)
-    # J_dot_inv = np.dot(Jt,inverse)
-    # delt_q_err = np.dot(J_dot_inv,  delt_x)
-    # print(delt_q_err)
-    # q -= delt_q_err
-    # # q = np.linalg.pinv(np.array([q]))
-    # print(q)
+
+    def move_dir(q, delt_x, steps):
+        for i in range(steps):
+            J = arm_skeleton.get_jacobian(hand.get_endeffector_body_node())
+            Jt = np.transpose(J)
+            J_Jt_Dot = np.dot(J, Jt)
+            inverse = np.linalg.inv(J_Jt_Dot)
+            J_dot_inv = np.dot(Jt,inverse)
+            delt_q_err = np.dot(J_dot_inv,  delt_x)
+            print(delt_q_err)
+            q -= delt_q_err
+
+            if if_sim:
+                ada.set_positions(q)
+                viewer.update()
+                time.sleep(0.10)
+        
+        if not if_sim:
+		    # in real world
+            traj = ada.plan_to_configuration(ada.get_arm_state_space(), ada.get_arm_skeleton(), q)
+            retimed_traj = ada.compute_retime_path(ada.get_arm_skeleton(), traj)
+            ada.execute_trajectory(retimed_traj)
+            time.sleep(0.50)
+        
+        return q
     
-    delt_x = np.array([0,0,0,-0.01,0,0])
-    for i in range(50):
-        J = arm_skeleton.get_jacobian(hand.get_endeffector_body_node())
-        Jt = np.transpose(J)
-        J_Jt_Dot = np.dot(J, Jt)
-        inverse = np.linalg.inv(J_Jt_Dot)
-        J_dot_inv = np.dot(Jt,inverse)
-        delt_q_err = np.dot(J_dot_inv,  delt_x)
-        print(delt_q_err)
-        q -= delt_q_err
-        ada.set_positions(q)
-        viewer.update()
-        time.sleep(0.05)
 
-    ###
-    if if_sim:
-            ada.set_positions(q)
-            viewer.update()
-            time.sleep(0.05)
-    else:
-        # in real world
-        traj = ada.plan_to_configuration(
-            ada.get_arm_state_space(), ada.get_arm_skeleton(), q)
-        retimed_traj = ada.compute_retime_path(ada.get_arm_skeleton(), traj)
-        ada.execute_trajectory(retimed_traj)
+    print("Lifting can...")
+    q = move_dir(q, np.array([0,0,0,-0.01,0,0]), 50)
+    time.sleep(5)
 
-    input('Press ENTER after robot has succeeded lifting up the can...')
+    # This section onwards is for the in-person lab
+
+    print("Lowering can...")
+    q = move_dir(q, np.array([0,0,0,0.01,0,0]), 42)
+    time.sleep(5)
+    
+    print("Moving forward...")
+    q = move_dir(q, np.array([0,0,0,0,0,-0.01]), 20)
+    time.sleep(5)
+
+    print("Rotating can...")
+    q = move_dir(q, np.array([0,0,0.03,0,0,0]), 50)
+    user_input('Press ENTER after robot has succeeded rotating can...')
 
     # clean the scene
     # world.remove_skeleton(soda)
@@ -326,9 +337,9 @@ def main(if_sim):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--sim', dest='if_sim', action='store_true')
-    parser.add_argument('--real', dest='if_sim', action='store_false')
-    parser.set_defaults(if_sim=True)
-    args = parser.parse_args()
-    main(args.if_sim)
+   parser = argparse.ArgumentParser()
+   parser.add_argument('--sim', dest='if_sim', action='store_true')
+   parser.add_argument('--real', dest='if_sim', action='store_false')
+   parser.set_defaults(if_sim=True)
+   args = parser.parse_args()
+   main(args.if_sim)
